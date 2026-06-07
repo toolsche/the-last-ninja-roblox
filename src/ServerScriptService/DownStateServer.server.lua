@@ -35,10 +35,6 @@ local function revivePlayer(target, reviver)
 
 	removePrompt(character)
 
-	-- Server unanchored → repliziert zu allen Clients (auch Beobachtern)
-	local root = character:FindFirstChild("HumanoidRootPart")
-	if root then root.Anchored = false end
-
 	local h = character:FindFirstChildOfClass("Humanoid")
 	if h then
 		isDown.Value = false
@@ -76,11 +72,8 @@ local function setupCharacter(player, character)
 				end
 			end)
 
-			-- Server anchored → Position einfrieren, repliziert zu allen Clients
-			local root = character:FindFirstChild("HumanoidRootPart")
-			if root then root.Anchored = true end
-
 			-- Prompt erstellen bevor Event gefeuert wird
+			local root = character:FindFirstChild("HumanoidRootPart")
 			if root then
 				local att = Instance.new("Attachment")
 				att.Name     = "ReviveAttachment"
