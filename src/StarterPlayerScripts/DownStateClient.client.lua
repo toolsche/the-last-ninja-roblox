@@ -45,8 +45,8 @@ local function playDownSound(character)
 	local root = character:FindFirstChild("HumanoidRootPart")
 	if not root then return end
 	local sound = Instance.new("Sound")
-	-- Roblox "Hurt" Sound – in Creator Library ersetzen falls gewünscht
-	sound.SoundId            = "rbxassetid://3612513498"
+	-- Sound-ID: Toolbox → Audio → "hurt" suchen → Free → ID aus Properties kopieren
+	sound.SoundId            = "rbxassetid://HIER_ID_EINFUEGEN"
 	sound.Volume             = 1
 	sound.RollOffMaxDistance = 40
 	sound.Parent             = root
