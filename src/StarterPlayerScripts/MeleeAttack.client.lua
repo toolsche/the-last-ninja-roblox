@@ -36,44 +36,53 @@ local function playSlashVFX(position)
 	Debris:AddItem(part, 0.35)
 end
 
--- Arm-Schwung via Motor6D.Transform (Heartbeat überschreibt Animate-Script)
+-- Arm-Schwung: laufende Tracks pausieren damit Transform nicht überschrieben wird
 local function swingArm()
 	local char = localPlayer.Character
 	if not char then return end
 
-	-- R6: Right Shoulder im Torso
+	-- Gelenk finden (R6 oder R15)
 	local rs
 	local torso = char:FindFirstChild("Torso")
 	if torso then rs = torso:FindFirstChild("Right Shoulder") end
-
-	-- R15: RightShoulder im RightUpperArm
 	if not rs then
 		local rua = char:FindFirstChild("RightUpperArm")
 		if rua then rs = rua:FindFirstChild("RightShoulder") end
 	end
-
 	if not rs then return end
 
+	-- Laufende AnimationTracks pausieren
+	local humanoid = char:FindFirstChildOfClass("Humanoid")
+	local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
+	local pausedTracks = {}
+	if animator then
+		for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+			track:AdjustSpeed(0)
+			table.insert(pausedTracks, track)
+		end
+	end
+
+	-- Schwung-Animation über Transform
 	local elapsed = 0
 	local duration = 0.25
 	local conn
 	conn = RunService.Heartbeat:Connect(function(dt)
 		elapsed = elapsed + dt
 		local t = math.min(elapsed / duration, 1)
-
-		-- Vorwärts-Schwung in erster Hälfte, zurück in zweiter
 		local angle
 		if t < 0.5 then
 			angle = -math.pi * 0.65 * (t * 2)
 		else
 			angle = -math.pi * 0.65 * (1 - (t - 0.5) * 2)
 		end
-
 		rs.Transform = CFrame.Angles(0, 0, angle)
 
 		if elapsed >= duration then
 			rs.Transform = CFrame.new()
 			conn:Disconnect()
+			for _, track in ipairs(pausedTracks) do
+				track:AdjustSpeed(1)
+			end
 		end
 	end)
 end
