@@ -24,12 +24,10 @@ local function revivePlayer(target, reviver)
 		downTimers[target.UserId] = nil
 	end
 
-	-- Prompt entfernen
 	local root = character:FindFirstChild("HumanoidRootPart")
 	if root then
 		local att = root:FindFirstChild("ReviveAttachment")
 		if att then att:Destroy() end
-		-- Root wieder beweglich machen
 		root.Anchored = false
 	end
 
@@ -39,9 +37,10 @@ local function revivePlayer(target, reviver)
 		h.WalkSpeed    = 16
 		h.JumpHeight   = 7.2
 		h.Health       = REVIVE_HP
+		h:ChangeState(Enum.HumanoidStateType.Running)
 	end
 
-	print(("[Down] %s wurde von %s gerettet!"):format(target.Name, reviver.Name))
+	print(("[Down] %s gerettet von %s"):format(target.Name, reviver.Name))
 	PlayerDowned:FireAllClients(target.UserId, false)
 end
 
@@ -49,12 +48,15 @@ local function setupCharacter(player, character)
 	local humanoid = character:WaitForChild("Humanoid")
 	local root     = character:WaitForChild("HumanoidRootPart")
 
+	-- Verhindert automatischen Tod zuverlässig
+	humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+
 	local isDown = Instance.new("BoolValue")
 	isDown.Name   = "IsDown"
 	isDown.Value  = false
 	isDown.Parent = character
 
-	-- Heartbeat: hält HP bei 1 solange Spieler down ist (Sicherheitsnetz)
+	-- Heartbeat: Sicherheitsnetz – hält HP bei 1 solange down
 	local heartbeatConn
 	heartbeatConn = RunService.Heartbeat:Connect(function()
 		if not isDown.Value then
@@ -68,24 +70,13 @@ local function setupCharacter(player, character)
 
 	humanoid.HealthChanged:Connect(function(hp)
 		if hp <= 0 and not isDown.Value then
-			isDown.Value = true
-
-			-- Health im nächsten Frame zurücksetzen (zuverlässiger als im Callback)
-			task.defer(function()
-				if humanoid.Health <= 0 then
-					humanoid.Health = 1
-				end
-			end)
-
-			-- Root einfrieren statt WalkSpeed zu manipulieren
-			root.Anchored  = true
+			isDown.Value       = true
+			humanoid.Health    = 1      -- synchron, kein defer
 			humanoid.WalkSpeed = 0
 			humanoid.JumpHeight = 0
+			root.Anchored      = true
 
-			print(("[Down] %s ist ausgeknockt!"):format(player.Name))
-			PlayerDowned:FireAllClients(player.UserId, true)
-
-			-- ProximityPrompt 3 Studs über dem Kopf
+			-- Attachment + Prompt ZUERST erstellen
 			local att = Instance.new("Attachment")
 			att.Name     = "ReviveAttachment"
 			att.Position = Vector3.new(0, 3, 0)
@@ -106,11 +97,15 @@ local function setupCharacter(player, character)
 				end
 			end)
 
+			-- DANN Event feuern (Attachment ist jetzt bereits vorhanden)
+			PlayerDowned:FireAllClients(player.UserId, true)
+			print(("[Down] %s ist ausgeknockt!"):format(player.Name))
+
 			-- 30s bis echter Tod
 			downTimers[player.UserId] = task.delay(DOWN_DURATION, function()
 				if isDown.Value then
-					print(("[Down] %s wurde nicht rechtzeitig gerettet."):format(player.Name))
 					root.Anchored = false
+					humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
 					humanoid.Health = 0
 				end
 			end)

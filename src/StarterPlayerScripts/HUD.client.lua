@@ -120,25 +120,33 @@ PlayerDowned.OnClientEvent:Connect(function(userId, isDownNow)
 		downOverlay.Visible = isDownNow
 
 		-- Eigenen ProximityPrompt ausblenden (kann sich selbst nicht retten)
-		local char = localPlayer.Character
-		if char then
-			local root = char:FindFirstChild("HumanoidRootPart")
-			if root then
-				-- Sofort ausblenden falls bereits vorhanden
-				local att = root:FindFirstChild("ReviveAttachment")
-				if att then
-					local prompt = att:FindFirstChildOfClass("ProximityPrompt")
-					if prompt then prompt.Enabled = false end
-				end
-				-- Auch auf zukünftige Prompts warten (Attachment entsteht kurz nach Down-Event)
-				if isDownNow then
-					task.delay(0.2, function()
-						att = root:FindFirstChild("ReviveAttachment")
-						if att then
-							local prompt = att:FindFirstChildOfClass("ProximityPrompt")
-							if prompt then prompt.Enabled = false end
+		if isDownNow then
+			local char = localPlayer.Character
+			if char then
+				local root = char:FindFirstChild("HumanoidRootPart")
+				if root then
+					local function disablePromptIn(att)
+						local prompt = att:FindFirstChildOfClass("ProximityPrompt")
+							or att:WaitForChild("ProximityPrompt", 2)
+						if prompt then
+							prompt.Enabled = false
 						end
-					end)
+					end
+
+					-- Attachment ist durch die neue Reihenfolge schon da wenn das Event ankommt
+					local att = root:FindFirstChild("ReviveAttachment")
+					if att then
+						disablePromptIn(att)
+					else
+						-- Fallback: warten bis es repliziert
+						local conn
+						conn = root.ChildAdded:Connect(function(child)
+							if child.Name == "ReviveAttachment" then
+								conn:Disconnect()
+								disablePromptIn(child)
+							end
+						end)
+					end
 				end
 			end
 		end
