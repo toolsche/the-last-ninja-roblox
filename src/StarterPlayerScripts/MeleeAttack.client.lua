@@ -4,6 +4,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
 local Debris = game:GetService("Debris")
 
 local localPlayer = Players.LocalPlayer
@@ -15,18 +16,18 @@ local ATTACK_RANGE = 10
 local COOLDOWN     = 0.8
 local canAttack    = true
 
--- Neon-Aufblitz am Trefferpunkt (Kugel – immer sichtbar)
+-- Neon-Aufblitz am Trefferpunkt
 local function playSlashVFX(position)
 	local part = Instance.new("Part")
-	part.Shape       = Enum.PartType.Ball
-	part.Size        = Vector3.new(3, 3, 3)
-	part.Position    = position
-	part.Anchored    = true
-	part.CanCollide  = false
-	part.Material    = Enum.Material.Neon
-	part.Color       = Color3.fromRGB(255, 120, 0)
+	part.Shape        = Enum.PartType.Ball
+	part.Size         = Vector3.new(3, 3, 3)
+	part.Position     = position
+	part.Anchored     = true
+	part.CanCollide   = false
+	part.Material     = Enum.Material.Neon
+	part.Color        = Color3.fromRGB(255, 120, 0)
 	part.Transparency = 0
-	part.Parent      = workspace
+	part.Parent       = workspace
 
 	TweenService:Create(part, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 		Transparency = 1,
@@ -35,35 +36,46 @@ local function playSlashVFX(position)
 	Debris:AddItem(part, 0.35)
 end
 
--- Rechten Arm schwingen – unterstützt R6 und R15
+-- Arm-Schwung via Motor6D.Transform (Heartbeat überschreibt Animate-Script)
 local function swingArm()
 	local char = localPlayer.Character
 	if not char then return end
 
-	-- R6: Motor6D "Right Shoulder" im Torso
+	-- R6: Right Shoulder im Torso
 	local rs
 	local torso = char:FindFirstChild("Torso")
-	if torso then
-		rs = torso:FindFirstChild("Right Shoulder")
-	end
+	if torso then rs = torso:FindFirstChild("Right Shoulder") end
 
-	-- R15: Motor6D "RightShoulder" im RightUpperArm
+	-- R15: RightShoulder im RightUpperArm
 	if not rs then
 		local rua = char:FindFirstChild("RightUpperArm")
 		if rua then rs = rua:FindFirstChild("RightShoulder") end
 	end
 
-	if not rs then
-		print("[MeleeAttack] kein Schultergelenk gefunden – R6/R15?")
-		return
-	end
+	if not rs then return end
 
-	local base = rs.C0
-	rs.C0 = base * CFrame.Angles(0, 0, -math.pi * 0.65)
-	task.wait(0.12)
-	rs.C0 = base * CFrame.Angles(0, 0, math.pi * 0.15)
-	task.wait(0.1)
-	rs.C0 = base
+	local elapsed = 0
+	local duration = 0.25
+	local conn
+	conn = RunService.Heartbeat:Connect(function(dt)
+		elapsed = elapsed + dt
+		local t = math.min(elapsed / duration, 1)
+
+		-- Vorwärts-Schwung in erster Hälfte, zurück in zweiter
+		local angle
+		if t < 0.5 then
+			angle = -math.pi * 0.65 * (t * 2)
+		else
+			angle = -math.pi * 0.65 * (1 - (t - 0.5) * 2)
+		end
+
+		rs.Transform = CFrame.Angles(0, 0, angle)
+
+		if elapsed >= duration then
+			rs.Transform = CFrame.new()
+			conn:Disconnect()
+		end
+	end)
 end
 
 mouse.Button1Down:Connect(function()
@@ -85,11 +97,8 @@ mouse.Button1Down:Connect(function()
 
 	canAttack = false
 	AttackMelee:FireServer(model)
-
-	local hitPos = mouse.Hit.Position
-	print("[MeleeAttack] Angriff auf", model.Name, "@ pos", hitPos)
 	task.spawn(swingArm)
-	playSlashVFX(hitPos)
+	playSlashVFX(mouse.Hit.Position)
 
 	task.delay(COOLDOWN, function() canAttack = true end)
 end)
