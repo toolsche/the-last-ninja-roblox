@@ -1,28 +1,47 @@
--- Erzwingt Ninja-Outfit für alle Spieler unabhängig vom Avatar
--- Avatar-Appearance lädt asynchron nach CharacterAdded → daher task.wait(1)
+-- Erzwingt Ninja-Outfit unabhängig vom Avatar-System
+-- ChildAdded-Wächter ersetzt Avatar-Kleidung sofort wenn sie lädt
 
 local Players = game:GetService("Players")
 
-local SHIRT_ID = 9572296491
-local PANTS_ID = 9572296491
+local SHIRT = "rbxassetid://9572296491"
+local PANTS = "rbxassetid://9572296491"
 
-local function applyNinjaOutfit(character)
-	local humanoid = character:WaitForChild("Humanoid")
-	task.wait(1)  -- Avatar-Appearance lädt asynchron; 1s reicht für Studio + Live
-	local desc = humanoid:GetAppliedDescription()
-	desc.Shirt = SHIRT_ID
-	desc.Pants  = PANTS_ID
-	humanoid:ApplyDescription(desc)
+local function forceClothing(character)
+	local ourShirt, ourPants
+
+	local function replaceClothing(child)
+		if child:IsA("Shirt") and child ~= ourShirt then
+			child:Destroy()
+			if not ourShirt or not ourShirt.Parent then
+				ourShirt = Instance.new("Shirt")
+				ourShirt.ShirtTemplate = SHIRT
+				ourShirt.Parent = character
+			end
+		elseif child:IsA("Pants") and child ~= ourPants then
+			child:Destroy()
+			if not ourPants or not ourPants.Parent then
+				ourPants = Instance.new("Pants")
+				ourPants.PantsTemplate = PANTS
+				ourPants.Parent = character
+			end
+		end
+	end
+
+	-- Bereits geladene Kleidung ersetzen
+	for _, v in ipairs(character:GetChildren()) do
+		replaceClothing(v)
+	end
+
+	-- Zukünftige Kleidung (Avatar-System lädt async) abfangen
+	character.ChildAdded:Connect(replaceClothing)
 end
 
 Players.PlayerAdded:Connect(function(player)
-	player.CharacterAdded:Connect(function(character)
-		applyNinjaOutfit(character)
-	end)
+	player.CharacterAdded:Connect(forceClothing)
 end)
 
 for _, player in ipairs(Players:GetPlayers()) do
 	if player.Character then
-		task.spawn(applyNinjaOutfit, player.Character)
+		forceClothing(player.Character)
 	end
 end
