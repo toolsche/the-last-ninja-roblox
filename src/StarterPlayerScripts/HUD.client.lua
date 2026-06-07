@@ -113,41 +113,50 @@ downLabel.Font = Enum.Font.GothamBold
 downLabel.ZIndex = 11
 downLabel.Parent = downOverlay
 
--- Down-State: Overlay + Teamanzeige aktualisieren
+-- Down-State: Overlay, Bewegung und Teamanzeige
 PlayerDowned.OnClientEvent:Connect(function(userId, isDownNow)
-	-- Eigener Spieler: Overlay ein-/ausblenden + eigenen Prompt verstecken
+
 	if userId == localPlayer.UserId then
+		local char = localPlayer.Character
+		local h    = char and char:FindFirstChildOfClass("Humanoid")
+
 		downOverlay.Visible = isDownNow
 
-		-- Eigenen ProximityPrompt ausblenden (kann sich selbst nicht retten)
 		if isDownNow then
-			local char = localPlayer.Character
-			if char then
-				local root = char:FindFirstChild("HumanoidRootPart")
-				if root then
-					local function disablePromptIn(att)
-						local prompt = att:FindFirstChildOfClass("ProximityPrompt")
-							or att:WaitForChild("ProximityPrompt", 2)
-						if prompt then
-							prompt.Enabled = false
-						end
-					end
+			-- Client sperrt eigene Bewegung (Server-Änderungen kommen beim Owner nicht an)
+			if h then
+				h:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+				h.WalkSpeed  = 0
+				h.JumpHeight = 0
+			end
 
-					-- Attachment ist durch die neue Reihenfolge schon da wenn das Event ankommt
-					local att = root:FindFirstChild("ReviveAttachment")
-					if att then
-						disablePromptIn(att)
-					else
-						-- Fallback: warten bis es repliziert
-						local conn
-						conn = root.ChildAdded:Connect(function(child)
-							if child.Name == "ReviveAttachment" then
-								conn:Disconnect()
-								disablePromptIn(child)
-							end
-						end)
-					end
+			-- Eigenen Prompt ausblenden: Attachment ist bereits vorhanden
+			local root = char and char:FindFirstChild("HumanoidRootPart")
+			if root then
+				local function disableIn(att)
+					local prompt = att:FindFirstChildOfClass("ProximityPrompt")
+						or att:WaitForChild("ProximityPrompt", 2)
+					if prompt then prompt.Enabled = false end
 				end
+				local att = root:FindFirstChild("ReviveAttachment")
+				if att then
+					disableIn(att)
+				else
+					local conn
+					conn = root.ChildAdded:Connect(function(child)
+						if child.Name == "ReviveAttachment" then
+							conn:Disconnect()
+							disableIn(child)
+						end
+					end)
+				end
+			end
+		else
+			-- Client gibt Bewegung wieder frei
+			if h then
+				h:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
+				h.WalkSpeed  = 16   -- Fallback; GameManager setzt Klassen-Speed beim Spawn
+				h.JumpHeight = 7.2
 			end
 		end
 	end
