@@ -1,71 +1,42 @@
--- Autoritativer Kampf-Server: Schadensberechnung, Down-State, Combo-Finisher
+-- Server-autoritativer Nahkampf: Range + Cooldown Validierung
+-- Schaden nur auf NPCs (keine Spieler-gegen-Spieler Schäden)
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local WeaponSystem = require(ReplicatedStorage.Modules.WeaponSystem)
 
-local RemoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents")
-local PlayerAttack = RemoteEvents:WaitForChild("PlayerAttack")
-local PlayerDowned = RemoteEvents:WaitForChild("PlayerDowned")
+local AttackMelee = ReplicatedStorage:WaitForChild("RemoteEvents"):WaitForChild("AttackMelee")
 
--- Speichert den letzten Treffer pro Gegner für Combo-Finisher-Erkennung
--- [enemyId] = { userId, timestamp }
-local lastHits = {}
+local ATTACK_DAMAGE = 25
+local ATTACK_RANGE  = 12   -- etwas großzügiger als Client wegen Netzwerklatenz
+local COOLDOWN      = 0.8
 
-local DOWN_DURATION = 30  -- Sekunden bis Spieler stirbt wenn nicht revived
+local cooldowns = {}
 
--- Verarbeitet einen Angriff vom Client
-local function onPlayerAttack(player, targetId, attackType)
-	-- Sicherheitscheck: Spieler darf nur im aktiven Spielzustand angreifen
-	if not player.Character then return end
-
-	local weapon = player.Character:FindFirstChild("EquippedWeapon")
-	if not weapon then return end
-
-	local weaponName = weapon.Value
-	local stats = WeaponSystem.GetWeaponStats(weaponName)
-	if not stats then return end
-
-	local damage = attackType == "Heavy" and stats.HeavyDamage or stats.LightDamage
-
-	-- Combo-Finisher prüfen
+AttackMelee.OnServerEvent:Connect(function(player, targetModel)
+	-- Cooldown
 	local now = tick()
-	local last = lastHits[targetId]
-	if last and last.UserId ~= player.UserId and WeaponSystem.IsComboWindow(last.Timestamp, now) then
-		damage = damage * WeaponSystem.ComboFinisher.DamageMultiplier
-		print(("[CombatServer] COMBO FINISHER! %s + %s → %d Schaden"):format(
-			Players:GetPlayerByUserId(last.UserId).Name, player.Name, damage
-		))
-		lastHits[targetId] = nil
-	else
-		lastHits[targetId] = { UserId = player.UserId, Timestamp = now }
-	end
+	if cooldowns[player.UserId] and now - cooldowns[player.UserId] < COOLDOWN then return end
+	cooldowns[player.UserId] = now
 
-	-- Schaden auf Ziel anwenden
-	local target = game.Workspace:FindFirstChild(tostring(targetId))
-	if target then
-		local humanoid = target:FindFirstChildOfClass("Humanoid")
-		if humanoid and humanoid.Health > 0 then
-			humanoid:TakeDamage(damage)
-		end
-	end
-end
+	-- Ziel validieren
+	if not targetModel or not targetModel.Parent then return end
+	local humanoid = targetModel:FindFirstChildOfClass("Humanoid")
+	if not humanoid or humanoid.Health <= 0 then return end
 
--- Spieler wird ausgeknockt (kein sofortiger Tod)
-local function onPlayerDown(player)
-	print(("[CombatServer] %s ist ausgeknockt!"):format(player.Name))
-	PlayerDowned:FireAllClients(player.UserId)
+	-- Nur NPCs angreifbar, keine Spieler
+	if Players:GetPlayerFromCharacter(targetModel) then return end
 
-	-- Down-Timer: nach DOWN_DURATION stirbt der Spieler wenn nicht revived
-	task.delay(DOWN_DURATION, function()
-		if player and player.Character then
-			local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-			if humanoid and humanoid.Health <= 0 then
-				-- Spieler wurde nicht revived — Game Over Check
-				print(("[CombatServer] %s wurde nicht rechtzeitig revived"):format(player.Name))
-			end
-		end
-	end)
-end
+	-- Range-Prüfung server-seitig
+	local char = player.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	local targetRoot = targetModel:FindFirstChild("HumanoidRootPart")
+	if not root or not targetRoot then return end
+	if (root.Position - targetRoot.Position).Magnitude > ATTACK_RANGE then return end
 
-PlayerAttack.OnServerEvent:Connect(onPlayerAttack)
+	humanoid:TakeDamage(ATTACK_DAMAGE)
+	print(("[Combat] %s trifft %s (-%d HP)"):format(player.Name, targetModel.Name, ATTACK_DAMAGE))
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+	cooldowns[player.UserId] = nil
+end)
