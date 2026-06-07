@@ -15,35 +15,48 @@ local ATTACK_RANGE = 10
 local COOLDOWN     = 0.8
 local canAttack    = true
 
--- Kurzer Slash-Aufblitz am Trefferpunkt
+-- Neon-Aufblitz am Trefferpunkt (Kugel – immer sichtbar)
 local function playSlashVFX(position)
-	local slash = Instance.new("Part")
-	slash.Size        = Vector3.new(3, 3, 0.05)
-	slash.CFrame      = CFrame.new(position) * CFrame.Angles(0, math.random() * math.pi, math.random() * math.pi)
-	slash.Anchored    = true
-	slash.CanCollide  = false
-	slash.CanQuery    = false
-	slash.CanTouch    = false
-	slash.Material    = Enum.Material.Neon
-	slash.Color       = Color3.fromRGB(220, 220, 255)
-	slash.Transparency = 0.3
-	slash.Parent      = workspace
+	local part = Instance.new("Part")
+	part.Shape       = Enum.PartType.Ball
+	part.Size        = Vector3.new(3, 3, 3)
+	part.Position    = position
+	part.Anchored    = true
+	part.CanCollide  = false
+	part.Material    = Enum.Material.Neon
+	part.Color       = Color3.fromRGB(255, 120, 0)
+	part.Transparency = 0
+	part.Parent      = workspace
 
-	TweenService:Create(slash, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {
+	TweenService:Create(part, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 		Transparency = 1,
-		Size = Vector3.new(5, 5, 0.05),
+		Size = Vector3.new(6, 6, 6),
 	}):Play()
-	Debris:AddItem(slash, 0.3)
+	Debris:AddItem(part, 0.35)
 end
 
--- Rechten Arm kurz nach vorne schwingen (R6 Motor6D)
+-- Rechten Arm schwingen – unterstützt R6 und R15
 local function swingArm()
 	local char = localPlayer.Character
 	if not char then return end
+
+	-- R6: Motor6D "Right Shoulder" im Torso
+	local rs
 	local torso = char:FindFirstChild("Torso")
-	if not torso then return end
-	local rs = torso:FindFirstChild("Right Shoulder")
-	if not rs then return end
+	if torso then
+		rs = torso:FindFirstChild("Right Shoulder")
+	end
+
+	-- R15: Motor6D "RightShoulder" im RightUpperArm
+	if not rs then
+		local rua = char:FindFirstChild("RightUpperArm")
+		if rua then rs = rua:FindFirstChild("RightShoulder") end
+	end
+
+	if not rs then
+		print("[MeleeAttack] kein Schultergelenk gefunden – R6/R15?")
+		return
+	end
 
 	local base = rs.C0
 	rs.C0 = base * CFrame.Angles(0, 0, -math.pi * 0.65)
@@ -59,13 +72,11 @@ mouse.Button1Down:Connect(function()
 	local target = mouse.Target
 	if not target then return end
 
-	-- Prüfen ob das getroffene Part zu einem NPC-Modell gehört
 	local model = target:FindFirstAncestorOfClass("Model")
 	if not model then return end
 	if not model:FindFirstChildOfClass("Humanoid") then return end
 	if model == localPlayer.Character then return end
 
-	-- Grobe Range-Prüfung client-seitig (Server verifiziert nochmal)
 	local char = localPlayer.Character
 	local root = char and char:FindFirstChild("HumanoidRootPart")
 	local targetRoot = model:FindFirstChild("HumanoidRootPart")
@@ -75,9 +86,10 @@ mouse.Button1Down:Connect(function()
 	canAttack = false
 	AttackMelee:FireServer(model)
 
-	-- Visuelle Effekte (nur lokal)
+	local hitPos = mouse.Hit.Position
+	print("[MeleeAttack] Angriff auf", model.Name, "@ pos", hitPos)
 	task.spawn(swingArm)
-	playSlashVFX(mouse.Hit.Position)
+	playSlashVFX(hitPos)
 
 	task.delay(COOLDOWN, function() canAttack = true end)
 end)
