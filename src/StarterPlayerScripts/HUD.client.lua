@@ -93,15 +93,44 @@ local function updateTeamDisplay()
 	end
 end
 
--- Spieler ist ausgeknockt → Eintrag rot färben
-PlayerDowned.OnClientEvent:Connect(function(userId)
+-- Downed-Overlay für den lokalen Spieler
+local downOverlay = Instance.new("Frame")
+downOverlay.Size = UDim2.fromScale(1, 1)
+downOverlay.BackgroundColor3 = Color3.fromRGB(120, 0, 0)
+downOverlay.BackgroundTransparency = 0.5
+downOverlay.Visible = false
+downOverlay.ZIndex = 10
+downOverlay.Parent = screenGui
+
+local downLabel = Instance.new("TextLabel")
+downLabel.Size = UDim2.new(1, 0, 0, 80)
+downLabel.Position = UDim2.new(0, 0, 0.4, 0)
+downLabel.BackgroundTransparency = 1
+downLabel.Text = "AUSGEKNOCKT\nTeamkollege muss dich retten! (R)"
+downLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+downLabel.TextScaled = true
+downLabel.Font = Enum.Font.GothamBold
+downLabel.ZIndex = 11
+downLabel.Parent = downOverlay
+
+-- Down-State: Overlay + Teamanzeige aktualisieren
+PlayerDowned.OnClientEvent:Connect(function(userId, isDownNow)
+	-- Eigener Spieler: Overlay ein-/ausblenden
+	if userId == localPlayer.UserId then
+		downOverlay.Visible = isDownNow
+	end
+	-- Teamanzeige
 	local frame = teamFrames[userId]
 	if frame then
-		frame.BackgroundColor3 = Color3.fromRGB(80, 20, 20)
+		frame.BackgroundColor3 = isDownNow
+			and Color3.fromRGB(80, 20, 20)
+			or  Color3.fromRGB(20, 20, 30)
 		local label = frame:FindFirstChildOfClass("TextLabel")
-		if label then
-			local player = Players:GetPlayerByUserId(userId)
-			label.Text = (player and player.Name or "?") .. " – AUSGEKNOCKT"
+		local p = Players:GetPlayerByUserId(userId)
+		if label and p then
+			label.Text = isDownNow
+				and (p.Name .. " – AUSGEKNOCKT")
+				or  (p.Name .. " – ❤️")
 		end
 	end
 end)
