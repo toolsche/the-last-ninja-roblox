@@ -1,5 +1,4 @@
--- Down-State Client: verwaltet Bewegung und Zustände des EIGENEN Spielers
--- Getrennt vom HUD damit die Zuständigkeiten klar sind
+-- Down-State Client: Bewegung, visuelle Zustände und Sound des EIGENEN Spielers
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -8,8 +7,7 @@ local localPlayer = Players.LocalPlayer
 local RemoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents")
 local PlayerDowned = RemoteEvents:WaitForChild("PlayerDowned")
 
--- Dead-State bei jedem neuen Character client-seitig deaktivieren
--- (verhindert Tod-Animation wenn Health kurz 0 wird)
+-- Dead-State client-seitig deaktivieren damit keine Tod-Animation abgespielt wird
 local function setupCharacterClient(character)
 	local humanoid = character:WaitForChild("Humanoid")
 	humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
@@ -20,7 +18,7 @@ if localPlayer.Character then
 	setupCharacterClient(localPlayer.Character)
 end
 
--- Eigenen Prompt ausblenden: Attachment ist bereits vorhanden wenn Event ankommt
+-- Eigenen Prompt ausblenden (Attachment ist schon vorhanden wenn Event ankommt)
 local function hideOwnPrompt(root)
 	local function disableIn(att)
 		local prompt = att:FindFirstChildOfClass("ProximityPrompt")
@@ -51,13 +49,23 @@ PlayerDowned.OnClientEvent:Connect(function(userId, isDownNow)
 	if not h or not root then return end
 
 	if isDownNow then
-		root.Anchored  = true
-		h.WalkSpeed    = 0
-		h.JumpHeight   = 0
+		h.WalkSpeed     = 0
+		h.JumpHeight    = 0
+		h.PlatformStand = true    -- Charakter legt sich hin, Lauf-Animation stoppt
+
+		-- Treffsound
+		local sound = Instance.new("Sound")
+		sound.SoundId  = "rbxassetid://131070686"   -- klassischer Roblox-Hurt-Sound
+		sound.Volume   = 1
+		sound.Parent   = root
+		sound:Play()
+		game:GetService("Debris"):AddItem(sound, 3)
+
 		hideOwnPrompt(root)
 	else
-		root.Anchored  = false
-		h.WalkSpeed    = 16    -- GameManager setzt Klassen-Speed beim nächsten Spawn
-		h.JumpHeight   = 7.2
+		h.PlatformStand = false   -- Charakter steht auf
+		h.WalkSpeed     = 16      -- GameManager setzt Klassen-Speed beim nächsten Spawn
+		h.JumpHeight    = 7.2
+		root.Anchored   = false   -- Sicherheitsnetz falls Server-Anchor noch aktiv
 	end
 end)
