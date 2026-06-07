@@ -1,6 +1,7 @@
 -- Down-State und Revive-Mechanik (Server-autoritativ)
 
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local RemoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents")
@@ -18,28 +19,26 @@ local function revivePlayer(target, reviver)
 	local isDown = character:FindFirstChild("IsDown")
 	if not isDown or not isDown.Value then return end
 
-	-- Timer stoppen
 	if downTimers[target.UserId] then
 		task.cancel(downTimers[target.UserId])
 		downTimers[target.UserId] = nil
 	end
 
-	-- Attachment + Prompt entfernen
+	-- Prompt entfernen
 	local root = character:FindFirstChild("HumanoidRootPart")
 	if root then
 		local att = root:FindFirstChild("ReviveAttachment")
 		if att then att:Destroy() end
+		-- Root wieder beweglich machen
+		root.Anchored = false
 	end
 
-	-- Spieler aufstehen lassen
 	local h = character:FindFirstChildOfClass("Humanoid")
 	if h then
 		isDown.Value   = false
 		h.WalkSpeed    = 16
-		h.JumpPower    = 50
+		h.JumpHeight   = 7.2
 		h.Health       = REVIVE_HP
-		-- Roblox aus dem gelähmten Zustand holen
-		h:ChangeState(Enum.HumanoidStateType.GettingUp)
 	end
 
 	print(("[Down] %s wurde von %s gerettet!"):format(target.Name, reviver.Name))
@@ -48,53 +47,70 @@ end
 
 local function setupCharacter(player, character)
 	local humanoid = character:WaitForChild("Humanoid")
-
-	humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+	local root     = character:WaitForChild("HumanoidRootPart")
 
 	local isDown = Instance.new("BoolValue")
 	isDown.Name   = "IsDown"
 	isDown.Value  = false
 	isDown.Parent = character
 
+	-- Heartbeat: hält HP bei 1 solange Spieler down ist (Sicherheitsnetz)
+	local heartbeatConn
+	heartbeatConn = RunService.Heartbeat:Connect(function()
+		if not isDown.Value then
+			heartbeatConn:Disconnect()
+			return
+		end
+		if humanoid.Health <= 0 then
+			humanoid.Health = 1
+		end
+	end)
+
 	humanoid.HealthChanged:Connect(function(hp)
 		if hp <= 0 and not isDown.Value then
-			isDown.Value       = true
-			humanoid.Health    = 1
+			isDown.Value = true
+
+			-- Health im nächsten Frame zurücksetzen (zuverlässiger als im Callback)
+			task.defer(function()
+				if humanoid.Health <= 0 then
+					humanoid.Health = 1
+				end
+			end)
+
+			-- Root einfrieren statt WalkSpeed zu manipulieren
+			root.Anchored  = true
 			humanoid.WalkSpeed = 0
-			humanoid.JumpPower = 0
+			humanoid.JumpHeight = 0
 
 			print(("[Down] %s ist ausgeknockt!"):format(player.Name))
 			PlayerDowned:FireAllClients(player.UserId, true)
 
-			-- ProximityPrompt auf einem Attachment 3 Studs über dem Kopf
-			local root = character:FindFirstChild("HumanoidRootPart")
-			if root then
-				local att = Instance.new("Attachment")
-				att.Name     = "ReviveAttachment"
-				att.Position = Vector3.new(0, 3, 0)   -- 3 Studs über dem Charakter
-				att.Parent   = root
+			-- ProximityPrompt 3 Studs über dem Kopf
+			local att = Instance.new("Attachment")
+			att.Name     = "ReviveAttachment"
+			att.Position = Vector3.new(0, 3, 0)
+			att.Parent   = root
 
-				local prompt = Instance.new("ProximityPrompt")
-				prompt.ActionText            = "Wiederbeleben"
-				prompt.ObjectText            = player.Name
-				prompt.KeyboardKeyCode       = Enum.KeyCode.R
-				prompt.HoldDuration          = 3
-				prompt.MaxActivationDistance = 8
-				prompt.RequiresLineOfSight   = false
-				prompt.Parent = att
+			local prompt = Instance.new("ProximityPrompt")
+			prompt.ActionText            = "Wiederbeleben"
+			prompt.ObjectText            = player.Name
+			prompt.KeyboardKeyCode       = Enum.KeyCode.R
+			prompt.HoldDuration          = 3
+			prompt.MaxActivationDistance = 8
+			prompt.RequiresLineOfSight   = false
+			prompt.Parent = att
 
-				prompt.Triggered:Connect(function(reviverPlayer)
-					if reviverPlayer ~= player then
-						revivePlayer(player, reviverPlayer)
-					end
-				end)
-			end
+			prompt.Triggered:Connect(function(reviverPlayer)
+				if reviverPlayer ~= player then
+					revivePlayer(player, reviverPlayer)
+				end
+			end)
 
 			-- 30s bis echter Tod
 			downTimers[player.UserId] = task.delay(DOWN_DURATION, function()
 				if isDown.Value then
 					print(("[Down] %s wurde nicht rechtzeitig gerettet."):format(player.Name))
-					humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
+					root.Anchored = false
 					humanoid.Health = 0
 				end
 			end)

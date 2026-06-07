@@ -115,11 +115,36 @@ downLabel.Parent = downOverlay
 
 -- Down-State: Overlay + Teamanzeige aktualisieren
 PlayerDowned.OnClientEvent:Connect(function(userId, isDownNow)
-	-- Eigener Spieler: Overlay ein-/ausblenden
+	-- Eigener Spieler: Overlay ein-/ausblenden + eigenen Prompt verstecken
 	if userId == localPlayer.UserId then
 		downOverlay.Visible = isDownNow
+
+		-- Eigenen ProximityPrompt ausblenden (kann sich selbst nicht retten)
+		local char = localPlayer.Character
+		if char then
+			local root = char:FindFirstChild("HumanoidRootPart")
+			if root then
+				-- Sofort ausblenden falls bereits vorhanden
+				local att = root:FindFirstChild("ReviveAttachment")
+				if att then
+					local prompt = att:FindFirstChildOfClass("ProximityPrompt")
+					if prompt then prompt.Enabled = false end
+				end
+				-- Auch auf zukünftige Prompts warten (Attachment entsteht kurz nach Down-Event)
+				if isDownNow then
+					task.delay(0.2, function()
+						att = root:FindFirstChild("ReviveAttachment")
+						if att then
+							local prompt = att:FindFirstChildOfClass("ProximityPrompt")
+							if prompt then prompt.Enabled = false end
+						end
+					end)
+				end
+			end
+		end
 	end
-	-- Teamanzeige
+
+	-- Teamanzeige aktualisieren
 	local frame = teamFrames[userId]
 	if frame then
 		frame.BackgroundColor3 = isDownNow
