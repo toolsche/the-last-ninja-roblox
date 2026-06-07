@@ -114,24 +114,43 @@ downLabel.ZIndex = 11
 downLabel.Parent = downOverlay
 
 -- Down-State: Overlay, Bewegung und Teamanzeige
+local downStateConn = nil  -- StateChanged-Guard, solange Spieler down ist
+
 PlayerDowned.OnClientEvent:Connect(function(userId, isDownNow)
 
 	if userId == localPlayer.UserId then
 		local char = localPlayer.Character
 		local h    = char and char:FindFirstChildOfClass("Humanoid")
+		local root = char and char:FindFirstChild("HumanoidRootPart")
 
 		downOverlay.Visible = isDownNow
 
 		if isDownNow then
-			-- Client sperrt eigene Bewegung (Server-Änderungen kommen beim Owner nicht an)
 			if h then
-				h:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+				-- Alle "Hinlegen"-States deaktivieren
+				h:SetStateEnabled(Enum.HumanoidStateType.Dead,        false)
+				h:SetStateEnabled(Enum.HumanoidStateType.FallingDown,  false)
+				h:SetStateEnabled(Enum.HumanoidStateType.Ragdoll,      false)
 				h.WalkSpeed  = 0
 				h.JumpHeight = 0
+
+				-- Guard: falls trotzdem ein Lieg-State auftritt, sofort zurück
+				if downStateConn then downStateConn:Disconnect() end
+				downStateConn = h.StateChanged:Connect(function(_, new)
+					if new == Enum.HumanoidStateType.Dead
+					or new == Enum.HumanoidStateType.FallingDown
+					or new == Enum.HumanoidStateType.Ragdoll then
+						task.defer(function()
+							if h then h:ChangeState(Enum.HumanoidStateType.GettingUp) end
+						end)
+					end
+				end)
 			end
 
-			-- Eigenen Prompt ausblenden: Attachment ist bereits vorhanden
-			local root = char and char:FindFirstChild("HumanoidRootPart")
+			-- Physikalisches Umwerfen durch andere Spieler verhindern
+			if root then root.Anchored = true end
+
+			-- Eigenen Prompt ausblenden
 			if root then
 				local function disableIn(att)
 					local prompt = att:FindFirstChildOfClass("ProximityPrompt")
@@ -151,13 +170,21 @@ PlayerDowned.OnClientEvent:Connect(function(userId, isDownNow)
 					end)
 				end
 			end
+
 		else
-			-- Client gibt Bewegung wieder frei
+			-- Guard stoppen und Zustände wiederherstellen
+			if downStateConn then
+				downStateConn:Disconnect()
+				downStateConn = nil
+			end
 			if h then
-				h:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
-				h.WalkSpeed  = 16   -- Fallback; GameManager setzt Klassen-Speed beim Spawn
+				h:SetStateEnabled(Enum.HumanoidStateType.Dead,        true)
+				h:SetStateEnabled(Enum.HumanoidStateType.FallingDown,  true)
+				h:SetStateEnabled(Enum.HumanoidStateType.Ragdoll,      true)
+				h.WalkSpeed  = 16
 				h.JumpHeight = 7.2
 			end
+			if root then root.Anchored = false end
 		end
 	end
 
