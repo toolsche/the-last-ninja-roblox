@@ -19,6 +19,7 @@ local CLASS_DATA = {
 }
 
 local selectedClass = nil
+local confirmButton  -- forward declaration, wird weiter unten erstellt
 
 -- UI erstellen
 local screenGui = Instance.new("ScreenGui")
@@ -90,7 +91,7 @@ for _, classData in ipairs(CLASS_DATA) do
 end
 
 -- Bestätigen-Button
-local confirmButton = Instance.new("TextButton")
+confirmButton = Instance.new("TextButton")
 confirmButton.Name = "ConfirmButton"
 confirmButton.Size = UDim2.new(0.3, 0, 0.08, 0)
 confirmButton.Position = UDim2.new(0.35, 0, 0.78, 0)
